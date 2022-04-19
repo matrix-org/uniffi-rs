@@ -50,7 +50,7 @@ impl Config {
 impl From<&ComponentInterface> for Config {
     fn from(ci: &ComponentInterface) -> Self {
         Config {
-            cdylib_name: Some(format!("uniffi_{}", ci.namespace())),
+            cdylib_name: Some(ci.namespace().to_owned()),
             cdylib_path: None,
         }
     }

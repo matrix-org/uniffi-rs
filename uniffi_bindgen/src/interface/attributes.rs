@@ -156,7 +156,7 @@ impl<T: TryInto<EnumAttributes, Error = anyhow::Error>> TryFrom<Option<T>> for E
 /// This supports the `[Throws=ErrorName]` attribute for functions that
 /// can produce an error.
 #[derive(Debug, Clone, Hash, Default)]
-pub(super) struct FunctionAttributes(Vec<Attribute>);
+pub(super) struct FunctionAttributes(pub(super) Vec<Attribute>);
 
 impl FunctionAttributes {
     pub(super) fn get_throws_err(&self) -> Option<&str> {

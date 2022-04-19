@@ -35,18 +35,14 @@ lazy_static! {
 /// a foreign-language test file that exercises that component's bindings. It ensures that the
 /// component is compiled and available for use and then executes the foreign language script,
 /// returning successfully iff the script exits successfully.
-pub fn run_foreign_language_testcase(
-    pkg_dir: &str,
-    udl_files: &[&str],
-    test_file: &str,
-) -> Result<()> {
+pub fn run_foreign_language_testcase(pkg_dir: &str, test_file: &str) -> Result<()> {
     let cdylib_file = ensure_compiled_cdylib(pkg_dir)?;
-    let out_dir = cdylib_file
+    let cdylib_dir = cdylib_file
         .parent()
         .context("Generated cdylib has no parent directory")?
         .as_str();
     let _lock = UNIFFI_BINDGEN.lock();
-    run_uniffi_bindgen_test(out_dir, udl_files, test_file)?;
+    run_uniffi_bindgen_test(cdylib_dir, pkg_dir, test_file)?;
     Ok(())
 }
 
@@ -139,10 +135,9 @@ pub fn ensure_compiled_cdylib(pkg_dir: &str) -> Result<Utf8PathBuf> {
 /// on the `uniffi_bindgen` crate and execute its methods in-process. This is useful for folks
 /// who are working on uniffi itself and want to test out their changes to the bindings generator.
 #[cfg(not(feature = "builtin-bindgen"))]
-fn run_uniffi_bindgen_test(out_dir: &str, udl_files: &[&str], test_file: &str) -> Result<()> {
-    let udl_files = udl_files.join("\n");
+fn run_uniffi_bindgen_test(cdylib_dir: &str, pkg_dir: &str, test_file: &str) -> Result<()> {
     let status = Command::new("uniffi-bindgen")
-        .args(&["test", out_dir, &udl_files, test_file])
+        .args(&["test", cdylib_dir, pkg_dir, test_file])
         .status()?;
     if !status.success() {
         bail!("Error while running tests: {}", status);
@@ -151,6 +146,6 @@ fn run_uniffi_bindgen_test(out_dir: &str, udl_files: &[&str], test_file: &str) -
 }
 
 #[cfg(feature = "builtin-bindgen")]
-fn run_uniffi_bindgen_test(out_dir: &str, udl_files: &[&str], test_file: &str) -> Result<()> {
-    uniffi_bindgen::run_tests(out_dir, udl_files, &[test_file], None)
+fn run_uniffi_bindgen_test(cdylib_dir: &str, pkg_dir: &str, test_file: &str) -> Result<()> {
+    uniffi_bindgen::run_tests(cdylib_dir, pkg_dir, &[test_file], None)
 }

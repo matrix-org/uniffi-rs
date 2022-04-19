@@ -108,8 +108,8 @@ impl Config {
 impl From<&ComponentInterface> for Config {
     fn from(ci: &ComponentInterface) -> Self {
         Config {
-            module_name: Some(ci.namespace().into()),
-            cdylib_name: Some(format!("uniffi_{}", ci.namespace())),
+            module_name: Some(ci.namespace().to_owned()),
+            cdylib_name: Some(ci.namespace().to_owned()),
             ..Default::default()
         }
     }
