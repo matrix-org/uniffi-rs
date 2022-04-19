@@ -94,6 +94,45 @@ impl Function {
     }
 }
 
+impl From<uniffi_meta::FnMetadata> for Function {
+    fn from(meta: uniffi_meta::FnMetadata) -> Self {
+        if !meta.inputs.is_empty() {
+            unimplemented!("TODO(jplatte)");
+        }
+
+        // FIXME(jplatte): add type assertions to ensure these names aren't shadowed!
+        // TODO(jplatte): add support for attributes on parameters that customize the type repr
+        let return_type = meta.output.map(|out| match out.as_str() {
+            "u8" => Type::UInt8,
+            "u16" => Type::UInt16,
+            "u32" => Type::UInt32,
+            "u64" => Type::UInt64,
+            "i8" => Type::Int8,
+            "i16" => Type::Int16,
+            "i32" => Type::Int32,
+            "i64" => Type::Int64,
+            "f32" => Type::Float32,
+            "f64" => Type::Float64,
+            "bool" => Type::Boolean,
+            "String" => Type::String,
+            _ => unimplemented!("TODO(jplatte)"),
+            //_ => Type::Object(out),
+        });
+
+        Self {
+            name: meta.name.clone(),
+            arguments: Vec::new(),
+            return_type,
+            ffi_func: FFIFunction {
+                name: format!("__uniffi_{}", meta.name),
+                arguments: Vec::new(),
+                return_type: None,
+            },
+            attributes: FunctionAttributes(Vec::new()),
+        }
+    }
+}
+
 impl Hash for Function {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // We don't include the FFIFunc in the hash calculation, because:

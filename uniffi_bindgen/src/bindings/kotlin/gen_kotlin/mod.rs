@@ -67,7 +67,7 @@ impl From<&ComponentInterface> for Config {
     fn from(ci: &ComponentInterface) -> Self {
         Config {
             package_name: Some(format!("uniffi.{}", ci.namespace())),
-            cdylib_name: Some(format!("uniffi_{}", ci.namespace())),
+            cdylib_name: Some(ci.namespace().to_owned()),
             custom_types: HashMap::new(),
             external_packages: HashMap::new(),
         }

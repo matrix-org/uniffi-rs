@@ -3,6 +3,7 @@ target
 .cargo
 .*.swp
 *.jar
+**/.uniffi/metadata
 .vscode
 xcuserdata
 docs/manual/src/internals/api

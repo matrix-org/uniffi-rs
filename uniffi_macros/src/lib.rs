@@ -1,6 +1,7 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#![cfg_attr(feature = "nightly", feature(proc_macro_expand))]
 
 //! Macros for `uniffi`.
 //!
@@ -11,6 +12,33 @@ use camino::{Utf8Path, Utf8PathBuf};
 use quote::{format_ident, quote};
 use std::env;
 use syn::{bracketed, punctuated::Punctuated, LitStr, Token};
+
+mod export;
+mod util;
+
+use self::export::{gen_scaffolding, write_metadata};
+
+#[proc_macro_attribute]
+pub fn export(
+    _attr: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let mod_path = util::mod_path();
+
+    let mut output = input.clone();
+    let res = syn::parse(input).and_then(|item| {
+        write_metadata(&item, &mod_path)?;
+        gen_scaffolding(&item, &mod_path)
+    });
+
+    let tokens = match res {
+        Ok(tokens) => tokens,
+        Err(e) => e.into_compile_error(),
+    };
+
+    output.extend(proc_macro::TokenStream::from(tokens));
+    output
+}
 
 /// A macro to build testcases for a component's generated bindings.
 ///
@@ -33,19 +61,9 @@ pub fn build_foreign_language_testcases(paths: proc_macro::TokenStream) -> proc_
     let pkg_dir = env::var("CARGO_MANIFEST_DIR")
         .expect("Missing $CARGO_MANIFEST_DIR, cannot build tests for generated bindings");
 
-    // Create an array of UDL files.
-    let udl_files = &paths
-        .udl_files
-        .iter()
-        .map(|file_path| {
-            let pathbuf: Utf8PathBuf = [&pkg_dir, file_path].iter().collect();
-            let path = pathbuf.to_string();
-            quote! { #path }
-        })
-        .collect::<Vec<proc_macro2::TokenStream>>();
-
     // For each test file found, generate a matching testcase.
-    let test_functions = paths.test_scripts
+    let test_functions = paths
+        .test_scripts
         .iter()
         .map(|file_path| {
             let test_file_pathbuf: Utf8PathBuf = [&pkg_dir, file_path].iter().collect();
@@ -60,13 +78,13 @@ pub fn build_foreign_language_testcases(paths: proc_macro::TokenStream) -> proc_
             let maybe_ignore = if should_skip_path(&test_file_pathbuf) {
                 quote! { #[ignore] }
             } else {
-                quote! { }
+                quote! {}
             };
             quote! {
                 #maybe_ignore
                 #[test]
                 fn #test_name () -> uniffi::deps::anyhow::Result<()> {
-                    uniffi::testing::run_foreign_language_testcase(#pkg_dir, &[ #(#udl_files),* ], #test_file_path)
+                    uniffi::testing::run_foreign_language_testcase(#pkg_dir, #test_file_path)
                 }
             }
         })
@@ -88,21 +106,11 @@ fn should_skip_path(path: &Utf8Path) -> bool {
 /// Newtype to simplifying parsing a list of file paths from macro input.
 #[derive(Debug)]
 struct FilePaths {
-    udl_files: Vec<String>,
     test_scripts: Vec<String>,
 }
 
 impl syn::parse::Parse for FilePaths {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let udl_array;
-        bracketed!(udl_array in input);
-        let udl_files = Punctuated::<LitStr, Token![,]>::parse_terminated(&udl_array)?
-            .iter()
-            .map(|s| s.value())
-            .collect();
-
-        let _comma: Token![,] = input.parse()?;
-
         let scripts_array;
         bracketed!(scripts_array in input);
         let test_scripts = Punctuated::<LitStr, Token![,]>::parse_terminated(&scripts_array)?
@@ -110,9 +118,6 @@ impl syn::parse::Parse for FilePaths {
             .map(|s| s.value())
             .collect();
 
-        Ok(FilePaths {
-            udl_files,
-            test_scripts,
-        })
+        Ok(FilePaths { test_scripts })
     }
 }
