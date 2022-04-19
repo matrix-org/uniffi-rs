@@ -46,10 +46,8 @@
 
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
-    convert::TryFrom,
     hash::{Hash, Hasher},
     iter,
-    str::FromStr,
 };
 
 use anyhow::{bail, Result};
@@ -102,37 +100,6 @@ pub struct ComponentInterface {
 }
 
 impl ComponentInterface {
-    /// Parse a `ComponentInterface` from a string containing a WebIDL definition.
-    pub fn from_webidl(idl: &str) -> Result<Self> {
-        let mut ci = Self {
-            uniffi_version: env!("CARGO_PKG_VERSION").to_string(),
-            ..Default::default()
-        };
-        // There's some lifetime thing with the errors returned from weedle::Definitions::parse
-        // that my own lifetime is too short to worry about figuring out; unwrap and move on.
-
-        // Note we use `weedle::Definitions::parse` instead of `weedle::parse` so
-        // on parse errors we can see how far weedle got, which helps locate the problem.
-        use weedle::Parse; // this trait must be in scope for parse to work.
-        let (remaining, defns) = weedle::Definitions::parse(idl.trim()).unwrap();
-        if !remaining.is_empty() {
-            println!("Error parsing the IDL. Text remaining to be parsed is:");
-            println!("{}", remaining);
-            bail!("parse error");
-        }
-        // Unconditionally add the String type, which is used by the panic handling
-        let _ = ci.types.add_known_type(Type::String);
-        // We process the WebIDL definitions in two passes.
-        // First, go through and look for all the named types.
-        ci.types.add_type_definitions_from(defns.as_slice())?;
-        // With those names resolved, we can build a complete representation of the API.
-        APIBuilder::process(&defns, &mut ci)?;
-        ci.check_consistency()?;
-        // Now that the high-level API is settled, we can derive the low-level FFI.
-        ci.derive_ffi_funcs()?;
-        Ok(ci)
-    }
-
     /// The string namespace within which this API should be presented to the caller.
     ///
     /// This string would typically be used to prefix function names in the FFI, to build
@@ -445,29 +412,6 @@ impl ComponentInterface {
         self.types.resolve_type_expression(expr)
     }
 
-    /// Resolve a weedle `ReturnType` expression into an optional `Type`.
-    ///
-    /// This method is similar to `resolve_type_expression`, but tailored specifically for return types.
-    /// It can return `None` to represent a non-existent return value.
-    fn resolve_return_type_expression(
-        &mut self,
-        expr: &weedle::types::ReturnType<'_>,
-    ) -> Result<Option<Type>> {
-        Ok(match expr {
-            weedle::types::ReturnType::Undefined(_) => None,
-            weedle::types::ReturnType::Type(t) => {
-                // Older versions of WebIDL used `void` for functions that don't return a value,
-                // while newer versions have replaced it with `undefined`. Special-case this for
-                // backwards compatibility for our consumers.
-                use weedle::types::{NonAnyType::Identifier, SingleType::NonAny, Type::Single};
-                match t {
-                    Single(NonAny(Identifier(id))) if id.type_.0 == "void" => None,
-                    _ => Some(self.resolve_type_expression(t)?),
-                }
-            }
-        })
-    }
-
     /// Called by `APIBuilder` impls to add a newly-parsed namespace definition to the `ComponentInterface`.
     fn add_namespace_definition(&mut self, defn: Namespace) -> Result<()> {
         if !self.namespace.is_empty() {
@@ -560,14 +504,6 @@ impl ComponentInterface {
             callback.derive_ffi_funcs(&ci_prefix);
         }
         Ok(())
-    }
-}
-
-/// Convenience implementation for parsing a `ComponentInterface` from a string.
-impl FromStr for ComponentInterface {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self> {
-        ComponentInterface::from_webidl(s)
     }
 }
 
@@ -691,219 +627,12 @@ impl<'a> Iterator for RecursiveTypeIterator<'a> {
     }
 }
 
-/// Trait to help build a `ComponentInterface` from WedIDL syntax nodes.
-///
-/// This trait does structural matching on the various weedle AST nodes and
-/// uses them to build up the records, enums, objects etc in the provided
-/// `ComponentInterface`.
-trait APIBuilder {
-    fn process(&self, ci: &mut ComponentInterface) -> Result<()>;
-}
-
-/// Add to a `ComponentInterface` from a list of weedle definitions,
-/// by processing each in turn.
-impl<T: APIBuilder> APIBuilder for Vec<T> {
-    fn process(&self, ci: &mut ComponentInterface) -> Result<()> {
-        for item in self {
-            item.process(ci)?;
-        }
-        Ok(())
-    }
-}
-
-/// Add to a `ComponentInterface` from a weedle definition.
-/// This is conceptually the root of the parser, and dispatches to implementations
-/// for the various specific WebIDL types that we support.
-impl APIBuilder for weedle::Definition<'_> {
-    fn process(&self, ci: &mut ComponentInterface) -> Result<()> {
-        match self {
-            weedle::Definition::Namespace(d) => d.process(ci)?,
-            weedle::Definition::Enum(d) => {
-                // We check if the enum represents an error...
-                let attrs = attributes::EnumAttributes::try_from(d.attributes.as_ref())?;
-                if attrs.contains_error_attr() {
-                    let err = d.convert(ci)?;
-                    ci.add_error_definition(err);
-                } else {
-                    let e = d.convert(ci)?;
-                    ci.add_enum_definition(e);
-                }
-            }
-            weedle::Definition::Dictionary(d) => {
-                let rec = d.convert(ci)?;
-                ci.add_record_definition(rec);
-            }
-            weedle::Definition::Interface(d) => {
-                let attrs = attributes::InterfaceAttributes::try_from(d.attributes.as_ref())?;
-                if attrs.contains_enum_attr() {
-                    let e = d.convert(ci)?;
-                    ci.add_enum_definition(e);
-                } else if attrs.contains_error_attr() {
-                    let e = d.convert(ci)?;
-                    ci.add_error_definition(e);
-                } else {
-                    let obj = d.convert(ci)?;
-                    ci.add_object_definition(obj);
-                }
-            }
-            weedle::Definition::CallbackInterface(d) => {
-                let obj = d.convert(ci)?;
-                ci.add_callback_interface_definition(obj);
-            }
-            // everything needed for typedefs is done in finder.rs.
-            weedle::Definition::Typedef(_) => {}
-            _ => bail!("don't know how to deal with {:?}", self),
-        }
-        Ok(())
-    }
-}
-
-/// Trait to help convert WedIDL syntax nodes into `ComponentInterface` objects.
-///
-/// This trait does structural matching on the various weedle AST nodes and converts
-/// them into appropriate structs that we can use to build up the contents of a
-/// `ComponentInterface`. It is basically the `TryFrom` trait except that the conversion
-/// always happens in the context of a given `ComponentInterface`, which is used for
-/// resolving e.g. type definitions.
-///
-/// The difference between this trait and `APIBuilder` is that `APIConverter` treats the
-/// `ComponentInterface` as a read-only data source for resolving types, while `APIBuilder`
-/// actually mutates the `ComponentInterface` to add new definitions.
-trait APIConverter<T> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<T>;
-}
-
-/// Convert a list of weedle items into a list of `ComponentInterface` items,
-/// by doing a direct item-by-item mapping.
-impl<U, T: APIConverter<U>> APIConverter<Vec<U>> for Vec<T> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Vec<U>> {
-        self.iter().map(|v| v.convert(ci)).collect::<Result<_>>()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     // Note that much of the functionality of `ComponentInterface` is tested via its interactions
     // with specific member types, in the sub-modules defining those member types.
-
-    const UDL1: &str = r#"
-        namespace foobar{};
-        enum Test {
-            "test_me",
-        };
-    "#;
-
-    const UDL2: &str = r#"
-        namespace hello {
-            u64 world();
-        };
-        dictionary Test {
-            boolean me;
-        };
-    "#;
-
-    #[test]
-    fn test_checksum_always_matches_for_same_webidl() {
-        for udl in &[UDL1, UDL2] {
-            let ci1 = ComponentInterface::from_webidl(udl).unwrap();
-            let ci2 = ComponentInterface::from_webidl(udl).unwrap();
-            assert_eq!(ci1.checksum(), ci2.checksum());
-        }
-    }
-
-    #[test]
-    fn test_checksum_differs_for_different_webidl() {
-        // There is a small probability of this test spuriously failing due to hash collision.
-        // If it happens often enough to be a problem, probably this whole "checksum" thing
-        // is not working out as intended.
-        let ci1 = ComponentInterface::from_webidl(UDL1).unwrap();
-        let ci2 = ComponentInterface::from_webidl(UDL2).unwrap();
-        assert_ne!(ci1.checksum(), ci2.checksum());
-    }
-
-    #[test]
-    fn test_checksum_differs_for_different_uniffi_version() {
-        // There is a small probability of this test spuriously failing due to hash collision.
-        // If it happens often enough to be a problem, probably this whole "checksum" thing
-        // is not working out as intended.
-        for udl in &[UDL1, UDL2] {
-            let ci1 = ComponentInterface::from_webidl(udl).unwrap();
-            let mut ci2 = ComponentInterface::from_webidl(udl).unwrap();
-            ci2.uniffi_version = String::from("fake-version");
-            assert_ne!(ci1.checksum(), ci2.checksum());
-        }
-    }
-
-    #[test]
-    fn test_duplicate_type_names_are_an_error() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor();
-            };
-            dictionary Testing {
-                u32 field;
-            };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "Conflicting type definition for \"Testing\""
-        );
-
-        const UDL2: &str = r#"
-            namespace test{};
-            enum Testing {
-                "one", "two"
-            };
-            [Error]
-            enum Testing { "three", "four" };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL2).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "Conflicting type definition for \"Testing\""
-        );
-
-        const UDL3: &str = r#"
-            namespace test{
-                u32 Testing();
-            };
-            enum Testing {
-                "one", "two"
-            };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL3).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "Conflicting type definition for \"Testing\""
-        );
-    }
-
-    #[test]
-    fn test_enum_variant_names_dont_shadow_types() {
-        // There are some edge-cases during codegen where we don't know how to disambiguate
-        // between an enum variant reference and a top-level type reference, so we
-        // disallow it in order to give a more scrutable error to the consumer.
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor();
-            };
-            [Enum]
-            interface HardToCodegenFor {
-                Testing();
-                OtherVariant(u32 field);
-            };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "Enum variant names must not shadow type names: \"Testing\""
-        );
-    }
 
     #[test]
     fn test_contains_optional_types() {
@@ -957,35 +686,5 @@ mod test {
             )
             .is_ok());
         assert!(ci.contains_map_types());
-    }
-
-    #[test]
-    fn test_no_infinite_recursion_when_walking_types() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                void tester(Testing foo);
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert!(!ci.item_contains_unsigned_types(&Type::Object("Testing".into())));
-    }
-
-    #[test]
-    fn test_correct_recursion_when_walking_types() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface TestObj {
-                void tester(TestRecord foo);
-            };
-            dictionary TestRecord {
-                NestedRecord bar;
-            };
-            dictionary NestedRecord {
-                u64 baz;
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert!(ci.item_contains_unsigned_types(&Type::Object("TestObj".into())));
     }
 }

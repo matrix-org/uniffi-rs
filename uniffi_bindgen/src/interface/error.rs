@@ -82,11 +82,8 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
-use anyhow::Result;
-
 use super::enum_::{Enum, Variant};
 use super::types::{Type, TypeIterator};
-use super::{APIConverter, ComponentInterface};
 
 /// Represents an Error that might be thrown by functions/methods in the component interface.
 ///
@@ -132,85 +129,5 @@ impl Error {
 
     pub fn iter_types(&self) -> TypeIterator<'_> {
         self.wrapped_enum().iter_types()
-    }
-}
-
-impl APIConverter<Error> for weedle::EnumDefinition<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Error> {
-        Ok(Error::from_enum(APIConverter::<Enum>::convert(self, ci)?))
-    }
-}
-
-impl APIConverter<Error> for weedle::InterfaceDefinition<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Error> {
-        Ok(Error::from_enum(APIConverter::<Enum>::convert(self, ci)?))
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_variants() {
-        const UDL: &str = r#"
-            namespace test{};
-            [Error]
-            enum Testing { "one", "two", "three" };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.error_definitions().len(), 1);
-        let error = ci.get_error_definition("Testing").unwrap();
-        assert_eq!(
-            error
-                .variants()
-                .iter()
-                .map(|v| v.name())
-                .collect::<Vec<&str>>(),
-            vec!("one", "two", "three")
-        );
-        assert!(error.is_flat());
-    }
-
-    #[test]
-    fn test_duplicate_variants() {
-        const UDL: &str = r#"
-            namespace test{};
-            // Weird, but currently allowed!
-            // We should probably disallow this...
-            [Error]
-            enum Testing { "one", "two", "one" };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.error_definitions().len(), 1);
-        assert_eq!(
-            ci.get_error_definition("Testing").unwrap().variants().len(),
-            3
-        );
-    }
-
-    #[test]
-    fn test_variant_data() {
-        const UDL: &str = r#"
-            namespace test{};
-
-            [Error]
-            interface Testing {
-                One(string reason);
-                Two(u8 code);
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.error_definitions().len(), 1);
-        let error: &Error = ci.get_error_definition("Testing").unwrap();
-        assert_eq!(
-            error
-                .variants()
-                .iter()
-                .map(|v| v.name())
-                .collect::<Vec<&str>>(),
-            vec!("One", "Two")
-        );
-        assert!(!error.is_flat());
     }
 }

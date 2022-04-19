@@ -78,14 +78,14 @@
 
 const BINDGEN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+use std::io::prelude::*;
+use std::{collections::HashMap, convert::TryInto, env, process::Command, str::FromStr};
+
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
 use fs_err::{self as fs, File};
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
-use std::io::prelude::*;
-use std::{collections::HashMap, env, process::Command, str::FromStr};
 
 pub mod backend;
 pub mod bindings;
@@ -182,7 +182,7 @@ fn load_bindings_config_toml<BC: BindingGeneratorConfig>(
         return Ok(None);
     }
 
-    let contents = slurp_file(&config_path)
+    let contents = fs::read_to_string(&config_path)
         .with_context(|| format!("Failed to read config file from {}", config_path))?;
     let full_config = toml::Value::from_str(&contents)
         .with_context(|| format!("Failed to parse config file {}", config_path))?;
@@ -238,7 +238,7 @@ pub fn generate_external_bindings(
     let out_dir_override = out_dir_override.as_ref().map(|p| p.as_ref());
     let config_file_override = config_file_override.as_ref().map(|p| p.as_ref());
     let out_dir = get_out_dir(udl_file.as_ref(), out_dir_override)?;
-    let component = parse_udl(udl_file.as_ref()).context("Error parsing UDL")?;
+    let component = parse_iface(udl_file.as_ref()).context("Error parsing UDL")?;
     let bindings_config =
         load_bindings_config(&component, udl_file.as_ref(), config_file_override)?;
     binding_generator.write_bindings(component, bindings_config, &out_dir)
@@ -252,7 +252,7 @@ pub fn generate_component_scaffolding(
     out_dir_override: Option<&Utf8Path>,
     format_code: bool,
 ) -> Result<()> {
-    let component = parse_udl(udl_file)?;
+    let component = parse_iface(udl_file)?;
     let _config = get_config(
         &component,
         guess_crate_root(udl_file)?,
@@ -278,7 +278,7 @@ pub fn generate_bindings(
     out_dir_override: Option<&Utf8Path>,
     try_format_code: bool,
 ) -> Result<()> {
-    let component = parse_udl(udl_file)?;
+    let component = parse_iface(udl_file)?;
     let config = get_config(
         &component,
         guess_crate_root(udl_file)?,
@@ -332,7 +332,7 @@ pub fn run_tests(
         for udl_file in udl_files {
             let udl_file = udl_file.as_ref();
             let crate_root = guess_crate_root(udl_file)?;
-            let component = parse_udl(udl_file)?;
+            let component = parse_iface(udl_file)?;
             let config = get_config(&component, crate_root, config_file_override)?;
             bindings::write_bindings(&config.bindings, &component, cdylib_dir, lang, true)?;
             bindings::compile_bindings(&config.bindings, &component, cdylib_dir, lang)?;
@@ -375,7 +375,7 @@ fn get_config(
 
     match config_file {
         Some(path) => {
-            let contents = slurp_file(&path)
+            let contents = fs::read_to_string(&path)
                 .with_context(|| format!("Failed to read config file from {}", &path))?;
             let loaded_config: Config = toml::de::from_str(&contents)
                 .with_context(|| format!("Failed to generate config from file {}", &path))?;
@@ -399,18 +399,8 @@ fn get_out_dir(udl_file: &Utf8Path, out_dir_override: Option<&Utf8Path>) -> Resu
     })
 }
 
-fn parse_udl(udl_file: &Utf8Path) -> Result<ComponentInterface> {
-    let udl =
-        slurp_file(udl_file).with_context(|| format!("Failed to read UDL from {}", &udl_file))?;
-    udl.parse::<interface::ComponentInterface>()
-        .context("Failed to parse UDL")
-}
-
-fn slurp_file(file_name: &Utf8Path) -> Result<String> {
-    let mut contents = String::new();
-    let mut f = File::open(file_name)?;
-    f.read_to_string(&mut contents)?;
-    Ok(contents)
+fn parse_iface(_dir: &Utf8Path) -> Result<ComponentInterface> {
+    todo!("TODO(jplatte)")
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

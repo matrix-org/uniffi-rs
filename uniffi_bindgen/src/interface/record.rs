@@ -44,11 +44,8 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
-use anyhow::{bail, Result};
-
-use super::literal::{convert_default_value, Literal};
+use super::literal::Literal;
 use super::types::{Type, TypeIterator};
-use super::{APIConverter, ComponentInterface};
 
 /// Represents a "data class" style object, for passing around complex values.
 ///
@@ -81,21 +78,6 @@ impl Record {
     }
 }
 
-impl APIConverter<Record> for weedle::DictionaryDefinition<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Record> {
-        if self.attributes.is_some() {
-            bail!("dictionary attributes are not supported yet");
-        }
-        if self.inheritance.is_some() {
-            bail!("dictionary inheritence is not supported");
-        }
-        Ok(Record {
-            name: self.identifier.0.to_string(),
-            fields: self.members.body.convert(ci)?,
-        })
-    }
-}
-
 // Represents an individual field on a Record.
 #[derive(Debug, Clone, Hash)]
 pub struct Field {
@@ -120,110 +102,5 @@ impl Field {
 
     pub fn iter_types(&self) -> TypeIterator<'_> {
         self.type_.iter_types()
-    }
-}
-
-impl APIConverter<Field> for weedle::dictionary::DictionaryMember<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Field> {
-        if self.attributes.is_some() {
-            bail!("dictionary member attributes are not supported yet");
-        }
-        let type_ = ci.resolve_type_expression(&self.type_)?;
-        if let Type::Object(_) = type_ {
-            bail!("Objects cannot currently appear in record fields");
-        }
-        let default = match self.default {
-            None => None,
-            Some(v) => Some(convert_default_value(&v.value, &type_)?),
-        };
-        Ok(Field {
-            name: self.identifier.0.to_string(),
-            type_,
-            required: self.required.is_some(),
-            default,
-        })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::super::literal::Radix;
-    use super::*;
-
-    #[test]
-    fn test_multiple_record_types() {
-        const UDL: &str = r#"
-            namespace test{};
-            dictionary Empty {};
-            dictionary Simple {
-                u32 field;
-            };
-            dictionary Complex {
-                string? key;
-                u32 value = 0;
-                required boolean spin;
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.record_definitions().len(), 3);
-
-        let record = ci.get_record_definition("Empty").unwrap();
-        assert_eq!(record.name(), "Empty");
-        assert_eq!(record.fields().len(), 0);
-
-        let record = ci.get_record_definition("Simple").unwrap();
-        assert_eq!(record.name(), "Simple");
-        assert_eq!(record.fields().len(), 1);
-        assert_eq!(record.fields()[0].name(), "field");
-        assert_eq!(record.fields()[0].type_().canonical_name(), "u32");
-        assert!(!record.fields()[0].required);
-        assert!(record.fields()[0].default_value().is_none());
-
-        let record = ci.get_record_definition("Complex").unwrap();
-        assert_eq!(record.name(), "Complex");
-        assert_eq!(record.fields().len(), 3);
-        assert_eq!(record.fields()[0].name(), "key");
-        assert_eq!(
-            record.fields()[0].type_().canonical_name(),
-            "Optionalstring"
-        );
-        assert!(!record.fields()[0].required);
-        assert!(record.fields()[0].default_value().is_none());
-        assert_eq!(record.fields()[1].name(), "value");
-        assert_eq!(record.fields()[1].type_().canonical_name(), "u32");
-        assert!(!record.fields()[1].required);
-        assert!(matches!(
-            record.fields()[1].default_value(),
-            Some(Literal::UInt(0, Radix::Decimal, Type::UInt32))
-        ));
-        assert_eq!(record.fields()[2].name(), "spin");
-        assert_eq!(record.fields()[2].type_().canonical_name(), "bool");
-        assert!(record.fields()[2].required);
-        assert!(record.fields()[2].default_value().is_none());
-    }
-
-    #[test]
-    fn test_that_all_field_types_become_known() {
-        const UDL: &str = r#"
-            namespace test{};
-            dictionary Testing {
-                string? maybe_name;
-                u32 value;
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.record_definitions().len(), 1);
-        let record = ci.get_record_definition("Testing").unwrap();
-        assert_eq!(record.fields().len(), 2);
-        assert_eq!(record.fields()[0].name(), "maybe_name");
-        assert_eq!(record.fields()[1].name(), "value");
-
-        assert_eq!(ci.iter_types().count(), 4);
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "u32"));
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "string"));
-        assert!(ci
-            .iter_types()
-            .any(|t| t.canonical_name() == "Optionalstring"));
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "TypeTesting"));
     }
 }

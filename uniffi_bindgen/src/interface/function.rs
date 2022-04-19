@@ -31,16 +31,14 @@
 //! assert_eq!(func.arguments().len(), 0);
 //! # Ok::<(), anyhow::Error>(())
 //! ```
-use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
-use super::attributes::{ArgumentAttributes, FunctionAttributes};
+use super::attributes::FunctionAttributes;
 use super::ffi::{FFIArgument, FFIFunction};
-use super::literal::{convert_default_value, Literal};
+use super::literal::Literal;
 use super::types::{Type, TypeIterator};
-use super::{APIConverter, ComponentInterface};
 
 /// Represents a standalone function.
 ///
@@ -111,31 +109,6 @@ impl Hash for Function {
     }
 }
 
-impl APIConverter<Function> for weedle::namespace::NamespaceMember<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Function> {
-        match self {
-            weedle::namespace::NamespaceMember::Operation(f) => f.convert(ci),
-            _ => bail!("no support for namespace member type {:?} yet", self),
-        }
-    }
-}
-
-impl APIConverter<Function> for weedle::namespace::OperationNamespaceMember<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Function> {
-        let return_type = ci.resolve_return_type_expression(&self.return_type)?;
-        Ok(Function {
-            name: match self.identifier {
-                None => bail!("anonymous functions are not supported {:?}", self),
-                Some(id) => id.0.to_string(),
-            },
-            return_type,
-            arguments: self.args.body.list.convert(ci)?,
-            ffi_func: Default::default(),
-            attributes: FunctionAttributes::try_from(self.attributes.as_ref())?,
-        })
-    }
-}
-
 /// Represents an argument to a function/constructor/method call.
 ///
 /// Each argument has a name and a type, along with some optional metadata.
@@ -176,78 +149,5 @@ impl From<&Argument> for FFIArgument {
             name: a.name.clone(),
             type_: (&a.type_).into(),
         }
-    }
-}
-
-impl APIConverter<Argument> for weedle::argument::Argument<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Argument> {
-        match self {
-            weedle::argument::Argument::Single(t) => t.convert(ci),
-            weedle::argument::Argument::Variadic(_) => bail!("variadic arguments not supported"),
-        }
-    }
-}
-
-impl APIConverter<Argument> for weedle::argument::SingleArgument<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Argument> {
-        let type_ = ci.resolve_type_expression(&self.type_)?;
-        let default = match self.default {
-            None => None,
-            Some(v) => Some(convert_default_value(&v.value, &type_)?),
-        };
-        let by_ref = ArgumentAttributes::try_from(self.attributes.as_ref())?.by_ref();
-        Ok(Argument {
-            name: self.identifier.0.to_string(),
-            type_,
-            by_ref,
-            optional: self.optional.is_some(),
-            default,
-        })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_minimal_and_rich_function() -> Result<()> {
-        let ci = ComponentInterface::from_webidl(
-            r##"
-            namespace test {
-                void minimal();
-                [Throws=TestError]
-                sequence<string?> rich(u32 arg1, TestDict arg2);
-            };
-            [Error]
-            enum TestError { "err" };
-            dictionary TestDict {
-                u32 field;
-            };
-        "##,
-        )?;
-
-        let func1 = ci.get_function_definition("minimal").unwrap();
-        assert_eq!(func1.name(), "minimal");
-        assert!(func1.return_type().is_none());
-        assert!(func1.throws().is_none());
-        assert_eq!(func1.arguments().len(), 0);
-
-        let func2 = ci.get_function_definition("rich").unwrap();
-        assert_eq!(func2.name(), "rich");
-        assert_eq!(
-            func2.return_type().unwrap().canonical_name(),
-            "SequenceOptionalstring"
-        );
-        assert!(matches!(func2.throws(), Some("TestError")));
-        assert_eq!(func2.arguments().len(), 2);
-        assert_eq!(func2.arguments()[0].name(), "arg1");
-        assert_eq!(func2.arguments()[0].type_().canonical_name(), "u32");
-        assert_eq!(func2.arguments()[1].name(), "arg2");
-        assert_eq!(
-            func2.arguments()[1].type_().canonical_name(),
-            "TypeTestDict"
-        );
-        Ok(())
     }
 }

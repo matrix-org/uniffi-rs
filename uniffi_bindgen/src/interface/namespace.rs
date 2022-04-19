@@ -61,72 +61,10 @@
 //! Yeah, it's a bit of an awkward fit syntactically, but it's enough
 //! to get us up and running for a first version of this tool.
 
-use anyhow::{bail, Result};
-
-use super::{APIBuilder, APIConverter, ComponentInterface};
-
 /// A namespace is currently just a name, but might hold more metadata about
 /// the component in future.
 ///
 #[derive(Debug, Clone, Hash)]
 pub struct Namespace {
     pub(super) name: String,
-}
-
-impl APIBuilder for weedle::NamespaceDefinition<'_> {
-    fn process(&self, ci: &mut ComponentInterface) -> Result<()> {
-        if self.attributes.is_some() {
-            bail!("namespace attributes are not supported yet");
-        }
-        ci.add_namespace_definition(Namespace {
-            name: self.identifier.0.to_string(),
-        })?;
-        for func in self.members.body.convert(ci)? {
-            ci.add_function_definition(func)?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_empty_namespace() {
-        const UDL: &str = r#"
-            namespace foobar{};
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.namespace(), "foobar");
-    }
-
-    #[test]
-    fn test_namespace_with_functions() {
-        const UDL: &str = r#"
-            namespace foobar{
-                boolean hello();
-                void world();
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.namespace(), "foobar");
-        assert_eq!(ci.function_definitions().len(), 2);
-        assert!(ci.get_function_definition("hello").is_some());
-        assert!(ci.get_function_definition("world").is_some());
-        assert!(ci.get_function_definition("potato").is_none());
-    }
-
-    #[test]
-    fn test_rejects_duplicate_namespaces() {
-        const UDL: &str = r#"
-            namespace foobar{
-                boolean hello();
-                void world();
-            };
-            namespace something_else{};
-        "#;
-        let err = ComponentInterface::from_webidl(UDL).unwrap_err();
-        assert_eq!(err.to_string(), "duplicate namespace definition");
-    }
 }

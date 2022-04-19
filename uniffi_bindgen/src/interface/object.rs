@@ -57,17 +57,15 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
-use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
-use std::{collections::HashSet, iter};
+use std::iter;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
-use super::attributes::{ConstructorAttributes, InterfaceAttributes, MethodAttributes};
+use super::attributes::{ConstructorAttributes, MethodAttributes};
 use super::ffi::{FFIArgument, FFIFunction, FFIType};
 use super::function::Argument;
 use super::types::{Type, TypeIterator};
-use super::{APIConverter, ComponentInterface};
 
 /// An "object" is an opaque type that can be instantiated and passed around by reference,
 /// have methods called on it, and so on - basically your classic Object Oriented Programming
@@ -195,43 +193,6 @@ impl Hash for Object {
     }
 }
 
-impl APIConverter<Object> for weedle::InterfaceDefinition<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Object> {
-        if self.inheritance.is_some() {
-            bail!("interface inheritence is not supported");
-        }
-        let mut object = Object::new(self.identifier.0.to_string());
-        let attributes = match &self.attributes {
-            Some(attrs) => InterfaceAttributes::try_from(attrs)?,
-            None => Default::default(),
-        };
-        object.uses_deprecated_threadsafe_attribute = attributes.threadsafe();
-        // Convert each member into a constructor or method, guarding against duplicate names.
-        let mut member_names = HashSet::new();
-        for member in &self.members.body {
-            match member {
-                weedle::interface::InterfaceMember::Constructor(t) => {
-                    let cons: Constructor = t.convert(ci)?;
-                    if !member_names.insert(cons.name.clone()) {
-                        bail!("Duplicate interface member name: \"{}\"", cons.name())
-                    }
-                    object.constructors.push(cons);
-                }
-                weedle::interface::InterfaceMember::Operation(t) => {
-                    let mut method: Method = t.convert(ci)?;
-                    if !member_names.insert(method.name.clone()) {
-                        bail!("Duplicate interface member name: \"{}\"", method.name())
-                    }
-                    method.object_name = object.name.clone();
-                    object.methods.push(method);
-                }
-                _ => bail!("no support for interface member type {:?} yet", member),
-            }
-        }
-        Ok(object)
-    }
-}
-
 // Represents a constructor for an object type.
 //
 // In the FFI, this will be a function that returns a pointer to an instance
@@ -308,21 +269,6 @@ impl Default for Constructor {
             ffi_func: Default::default(),
             attributes: Default::default(),
         }
-    }
-}
-
-impl APIConverter<Constructor> for weedle::interface::ConstructorInterfaceMember<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Constructor> {
-        let attributes = match &self.attributes {
-            Some(attr) => ConstructorAttributes::try_from(attr)?,
-            None => Default::default(),
-        };
-        Ok(Constructor {
-            name: String::from(attributes.get_name().unwrap_or("new")),
-            arguments: self.args.body.list.convert(ci)?,
-            ffi_func: Default::default(),
-            attributes,
-        })
     }
 }
 
@@ -418,162 +364,5 @@ impl Hash for Method {
         self.arguments.hash(state);
         self.return_type.hash(state);
         self.attributes.hash(state);
-    }
-}
-
-impl APIConverter<Method> for weedle::interface::OperationInterfaceMember<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<Method> {
-        if self.special.is_some() {
-            bail!("special operations not supported");
-        }
-        if self.modifier.is_some() {
-            bail!("method modifiers are not supported")
-        }
-        let return_type = ci.resolve_return_type_expression(&self.return_type)?;
-        Ok(Method {
-            name: match self.identifier {
-                None => bail!("anonymous methods are not supported {:?}", self),
-                Some(id) => {
-                    let name = id.0.to_string();
-                    if name == "new" {
-                        bail!("the method name \"new\" is reserved for the default constructor");
-                    }
-                    name
-                }
-            },
-            // We don't know the name of the containing `Object` at this point, fill it in later.
-            object_name: Default::default(),
-            arguments: self.args.body.list.convert(ci)?,
-            return_type,
-            ffi_func: Default::default(),
-            attributes: MethodAttributes::try_from(self.attributes.as_ref())?,
-        })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_that_all_argument_and_return_types_become_known() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor(string? name, u16 age);
-                sequence<u32> code_points_of_name();
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.object_definitions().len(), 1);
-        ci.get_object_definition("Testing").unwrap();
-
-        assert_eq!(ci.iter_types().count(), 6);
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "u16"));
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "u32"));
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "Sequenceu32"));
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "string"));
-        assert!(ci
-            .iter_types()
-            .any(|t| t.canonical_name() == "Optionalstring"));
-        assert!(ci.iter_types().any(|t| t.canonical_name() == "TypeTesting"));
-    }
-
-    #[test]
-    fn test_alternate_constructors() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor();
-                [Name=new_with_u32]
-                constructor(u32 v);
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.object_definitions().len(), 1);
-
-        let obj = ci.get_object_definition("Testing").unwrap();
-        assert!(obj.primary_constructor().is_some());
-        assert_eq!(obj.alternate_constructors().len(), 1);
-        assert_eq!(obj.methods().len(), 0);
-
-        let cons = obj.primary_constructor().unwrap();
-        assert_eq!(cons.name(), "new");
-        assert_eq!(cons.arguments.len(), 0);
-        assert_eq!(cons.ffi_func.arguments.len(), 0);
-
-        let cons = obj.alternate_constructors()[0];
-        assert_eq!(cons.name(), "new_with_u32");
-        assert_eq!(cons.arguments.len(), 1);
-        assert_eq!(cons.ffi_func.arguments.len(), 1);
-    }
-
-    #[test]
-    fn test_the_name_new_identifies_the_primary_constructor() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                [Name=newish]
-                constructor();
-                [Name=new]
-                constructor(u32 v);
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.object_definitions().len(), 1);
-
-        let obj = ci.get_object_definition("Testing").unwrap();
-        assert!(obj.primary_constructor().is_some());
-        assert_eq!(obj.alternate_constructors().len(), 1);
-        assert_eq!(obj.methods().len(), 0);
-
-        let cons = obj.primary_constructor().unwrap();
-        assert_eq!(cons.name(), "new");
-        assert_eq!(cons.arguments.len(), 1);
-
-        let cons = obj.alternate_constructors()[0];
-        assert_eq!(cons.name(), "newish");
-        assert_eq!(cons.arguments.len(), 0);
-        assert_eq!(cons.ffi_func.arguments.len(), 0);
-    }
-
-    #[test]
-    fn test_the_name_new_is_reserved_for_constructors() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor();
-                void new(u32 v);
-            };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "the method name \"new\" is reserved for the default constructor"
-        );
-    }
-
-    #[test]
-    fn test_duplicate_primary_constructors_not_allowed() {
-        const UDL: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor();
-                constructor(u32 v);
-            };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL).unwrap_err();
-        assert_eq!(err.to_string(), "Duplicate interface member name: \"new\"");
-
-        const UDL2: &str = r#"
-            namespace test{};
-            interface Testing {
-                constructor();
-                [Name=new]
-                constructor(u32 v);
-            };
-        "#;
-        let err = ComponentInterface::from_webidl(UDL2).unwrap_err();
-        assert_eq!(err.to_string(), "Duplicate interface member name: \"new\"");
     }
 }

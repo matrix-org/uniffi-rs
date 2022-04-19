@@ -35,12 +35,9 @@
 
 use std::hash::{Hash, Hasher};
 
-use anyhow::{bail, Result};
-
 use super::ffi::{FFIArgument, FFIFunction, FFIType};
 use super::object::Method;
 use super::types::{Type, TypeIterator};
-use super::{APIConverter, ComponentInterface};
 
 #[derive(Debug, Clone)]
 pub struct CallbackInterface {
@@ -98,79 +95,5 @@ impl Hash for CallbackInterface {
         //    avoids a weird circular depenendency in the calculation.
         self.name.hash(state);
         self.methods.hash(state);
-    }
-}
-
-impl APIConverter<CallbackInterface> for weedle::CallbackInterfaceDefinition<'_> {
-    fn convert(&self, ci: &mut ComponentInterface) -> Result<CallbackInterface> {
-        if self.attributes.is_some() {
-            bail!("callback interface attributes are not supported yet");
-        }
-        if self.inheritance.is_some() {
-            bail!("callback interface inheritence is not supported");
-        }
-        let mut object = CallbackInterface::new(self.identifier.0.to_string());
-        for member in &self.members.body {
-            match member {
-                weedle::interface::InterfaceMember::Operation(t) => {
-                    let mut method: Method = t.convert(ci)?;
-                    method.object_name = object.name.clone();
-                    object.methods.push(method);
-                }
-                _ => bail!(
-                    "no support for callback interface member type {:?} yet",
-                    member
-                ),
-            }
-        }
-        Ok(object)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_empty_interface() {
-        const UDL: &str = r#"
-            namespace test{};
-            // Weird, but allowed.
-            callback interface Testing {};
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.callback_interface_definitions().len(), 1);
-        assert_eq!(
-            ci.get_callback_interface_definition("Testing")
-                .unwrap()
-                .methods()
-                .len(),
-            0
-        );
-    }
-
-    #[test]
-    fn test_multiple_interfaces() {
-        const UDL: &str = r#"
-            namespace test{};
-            callback interface One {
-                void one();
-            };
-            callback interface Two {
-                u32 two();
-                u64 too();
-            };
-        "#;
-        let ci = ComponentInterface::from_webidl(UDL).unwrap();
-        assert_eq!(ci.callback_interface_definitions().len(), 2);
-
-        let callbacks_one = ci.get_callback_interface_definition("One").unwrap();
-        assert_eq!(callbacks_one.methods().len(), 1);
-        assert_eq!(callbacks_one.methods()[0].name(), "one");
-
-        let callbacks_two = ci.get_callback_interface_definition("Two").unwrap();
-        assert_eq!(callbacks_two.methods().len(), 2);
-        assert_eq!(callbacks_two.methods()[0].name(), "two");
-        assert_eq!(callbacks_two.methods()[1].name(), "too");
     }
 }

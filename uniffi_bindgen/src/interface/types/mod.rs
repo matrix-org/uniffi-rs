@@ -31,7 +31,7 @@ use super::ffi::FFIType;
 mod finder;
 pub(super) use finder::TypeFinder;
 mod resolver;
-pub(super) use resolver::{resolve_builtin_type, TypeResolver};
+pub(super) use resolver::TypeResolver;
 
 /// Represents all the different high-level types that can be used in a component interface.
 /// At this level we identify user-defined types by name, without knowing any details
@@ -215,13 +215,6 @@ impl TypeUniverse {
     ///
     /// This will fail if you try to add a name for which an existing type definition exists.
     pub fn add_type_definition(&mut self, name: &str, type_: Type) -> Result<()> {
-        if resolve_builtin_type(name).is_some() {
-            bail!(
-                "please don't shadow builtin types ({}, {})",
-                name,
-                type_.canonical_name()
-            );
-        }
         let type_ = self.add_known_type(type_)?;
         match self.type_definitions.entry(name.to_string()) {
             Entry::Occupied(_) => bail!("Conflicting type definition for \"{}\"", name),
