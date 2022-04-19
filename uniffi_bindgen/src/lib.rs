@@ -20,25 +20,9 @@
 //
 //! To build a cross-language component using `uniffi`, follow these steps.
 //!
-//! ### 1) Specify your Component Interface
+//! ### 1) Implement the Component Interface
 //!
-//! Start by thinking about the interface you want to expose for use
-//! from other languages. Use the Interface Definition Language to specify your interface
-//! in a `.udl` file, where it can be processed by the tools from this crate.
-//! For example you might define an interface like this:
-//!
-//! ```text
-//! namespace example {
-//!   u32 foo(u32 bar);
-//! }
-//!
-//! dictionary MyData {
-//!   u32 num_foos;
-//!   bool has_a_bar;
-//! }
-//! ```
-//!
-//! ### 2) Implement the Component Interface as a Rust crate
+//! TODO(jplatte): New docs
 //!
 //! With the interface, defined, provide a corresponding implementation of that interface
 //! as a standard-looking Rust crate, using functions and structs and so-on. For example
@@ -56,7 +40,7 @@
 //! }
 //! ```
 //!
-//! ### 3) Generate and include component scaffolding from the UDL file
+//! ### 2) Generate and include component scaffolding from the UDL file
 //!
 //! First you will need to install `uniffi-bindgen` on your system using `cargo install uniffi_bindgen`.
 //! Then add to your crate `uniffi_build` under `[build-dependencies]`.
@@ -75,7 +59,7 @@
 //! include!(concat!(env!("OUT_DIR"), "/example.uniffi.rs"));
 //! ```
 //!
-//! ### 4) Generate foreign language bindings for the library
+//! ### 3) Generate foreign language bindings for the library
 //!
 //! The `uniffi-bindgen` utility provides a command-line tool that can produce code to
 //! consume the Rust library in any of several supported languages.
