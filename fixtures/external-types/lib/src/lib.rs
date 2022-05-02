@@ -14,5 +14,3 @@ fn get_combined_type(existing: Option<CombinedType>) -> CombinedType {
         ctt: CrateTwoType { ival: 1 },
     })
 }
-
-include!(concat!(env!("OUT_DIR"), "/external-types-lib.uniffi.rs"));

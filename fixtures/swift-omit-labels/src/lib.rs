@@ -13,5 +13,3 @@ fn one_arg(amount: i32) -> i32 {
 fn multiple_args(amount: i32, _msg: String) -> i32 {
     amount
 }
-
-include!(concat!(env!("OUT_DIR"), "/omit_argument_labels.uniffi.rs"));

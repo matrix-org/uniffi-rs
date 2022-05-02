@@ -73,5 +73,3 @@ impl RustStringifier {
         self.callback.from_simple_type(value)
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/callbacks.uniffi.rs"));

@@ -14,5 +14,3 @@ pub fn which(arg: bool) -> Which {
         Which::Nah
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/test.uniffi.rs"));

@@ -4,7 +4,7 @@ use url::Url;
 pub struct Handle(pub i64);
 
 // We must implement the UniffiCustomTypeConverter trait for each custom type on the scaffolding side
-impl UniffiCustomTypeConverter for Handle {
+/* impl UniffiCustomTypeConverter for Handle {
     // The `Builtin` type will be used to marshall values across the FFI
     type Builtin = i64;
 
@@ -17,10 +17,10 @@ impl UniffiCustomTypeConverter for Handle {
     fn from_custom(obj: Self) -> Self::Builtin {
         obj.0
     }
-}
+} */
 
 // Use `url::Url` as a custom type, with `String` as the Builtin
-impl UniffiCustomTypeConverter for Url {
+/* impl UniffiCustomTypeConverter for Url {
     type Builtin = String;
 
     fn into_custom(val: Self::Builtin) -> uniffi::Result<Self> {
@@ -30,7 +30,7 @@ impl UniffiCustomTypeConverter for Url {
     fn from_custom(obj: Self) -> Self::Builtin {
         obj.into()
     }
-}
+} */
 
 // And a little struct and function that ties them together.
 pub struct CustomTypesDemo {
@@ -44,5 +44,3 @@ pub fn get_custom_types_demo(v: Option<CustomTypesDemo>) -> CustomTypesDemo {
         handle: Handle(123),
     })
 }
-
-include!(concat!(env!("OUT_DIR"), "/custom-types.uniffi.rs"));

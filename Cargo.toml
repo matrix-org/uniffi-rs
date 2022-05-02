@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "uniffi_bindgen",
-  "uniffi_build",
   "uniffi_macros",
   "uniffi_testing",
   "uniffi",
@@ -26,7 +25,6 @@ members = [
   "fixtures/external-types/crate-two",
   "fixtures/external-types/lib",
 
-  "fixtures/reexport-scaffolding-macro",
   "fixtures/regressions/enum-without-i32-helpers",
   "fixtures/regressions/fully-qualified-types",
   "fixtures/regressions/kotlin-experimental-unsigned-types",

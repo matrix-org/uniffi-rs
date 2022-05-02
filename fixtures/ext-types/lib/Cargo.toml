@@ -21,7 +21,7 @@ name = "uniffi_ext_types_lib"
 anyhow = "1"
 bytes = "1.0"
 uniffi_macros = {path = "../../../uniffi_macros"}
-uniffi = {path = "../../../uniffi", features=["builtin-bindgen"]}
+uniffi = {path = "../../../uniffi"}
 
 uniffi-fixture-ext-types-lib-one = {path = "../uniffi-one"}
 uniffi-fixture-ext-types-guid = {path = "../guid"}
@@ -30,8 +30,3 @@ uniffi-fixture-ext-types-guid = {path = "../guid"}
 uniffi-example-custom-types = {path = "../../../examples/custom-types"}
 
 url = "2.2"
-
-[build-dependencies]
-uniffi_build = {path = "../../../uniffi_build", features=["builtin-bindgen"]}
-
-

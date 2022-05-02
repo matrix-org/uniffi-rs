@@ -46,5 +46,3 @@ impl InterfaceUsingUnsigned {
         p1.member_two = UnsignedEnum::V1 { q1: 0 }
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/test.uniffi.rs"));

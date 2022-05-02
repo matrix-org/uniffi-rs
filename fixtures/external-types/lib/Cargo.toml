@@ -14,9 +14,6 @@ name = "uniffi_external_types_lib"
 anyhow = "1"
 bytes = "1.0"
 uniffi_macros = {path = "../../../uniffi_macros"}
-uniffi = {path = "../../../uniffi", features=["builtin-bindgen"]}
+uniffi = {path = "../../../uniffi"}
 crate_one = {path = "../crate-one"}
 crate_two = {path = "../crate-two"}
-
-[build-dependencies]
-uniffi_build = {path = "../../../uniffi_build", features=["builtin-bindgen"]}

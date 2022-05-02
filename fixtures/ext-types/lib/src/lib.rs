@@ -49,5 +49,3 @@ fn get_combined_type(existing: Option<CombinedType>) -> CombinedType {
         maybe_handle: Some(Handle(4)),
     })
 }
-
-include!(concat!(env!("OUT_DIR"), "/ext-types-lib.uniffi.rs"));

@@ -146,5 +146,3 @@ impl TodoList {
         set_default_list(self);
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/todolist.uniffi.rs"));

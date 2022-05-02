@@ -315,5 +315,3 @@ impl ThreadsafeCounter {
         }
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/coverall.uniffi.rs"));

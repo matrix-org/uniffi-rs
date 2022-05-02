@@ -61,5 +61,3 @@ impl Sprite {
         *current_position = translate(&*current_position, direction)
     }
 }
-
-include!(concat!(env!("OUT_DIR"), "/sprites.uniffi.rs"));

@@ -12,8 +12,5 @@ name = "uniffi_empty"
 
 [dependencies]
 uniffi_macros = {path = "../../../../uniffi_macros"}
-uniffi = {path = "../../../../uniffi", features=["builtin-bindgen"]}
+uniffi = {path = "../../../../uniffi"}
 uniffi-fixture-regression-cdylib-dependency = {path = "../cdylib-dependency"}
-
-[build-dependencies]
-uniffi_build = {path = "../../../../uniffi_build", features=["builtin-bindgen"]}

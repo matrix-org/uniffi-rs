@@ -43,5 +43,3 @@ pub fn intersection(ln1: Line, ln2: Line) -> Option<Point> {
         coord_y: g1 * x + z1,
     })
 }
-
-include!(concat!(env!("OUT_DIR"), "/geometry.uniffi.rs"));

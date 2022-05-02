@@ -74,7 +74,7 @@ pub fn run_callback(callback: Box<dyn GuidCallback>) -> Guid {
     callback.run(Guid("callback-test-payload".into()))
 }
 
-impl UniffiCustomTypeConverter for Guid {
+/* impl UniffiCustomTypeConverter for Guid {
     type Builtin = String;
 
     // This is a "fixture" rather than an "example", so we are free to do things that don't really
@@ -94,6 +94,4 @@ impl UniffiCustomTypeConverter for Guid {
     fn from_custom(obj: Self) -> Self::Builtin {
         obj.0
     }
-}
-
-include!(concat!(env!("OUT_DIR"), "/guid.uniffi.rs"));
+} */

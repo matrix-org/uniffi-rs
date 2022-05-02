@@ -289,5 +289,3 @@ pub struct OptionneurDictionnaire {
     enumeration_var: Enumeration,
     dictionnaire_var: Option<minusculeMAJUSCULEEnum>,
 }
-
-include!(concat!(env!("OUT_DIR"), "/rondpoint.uniffi.rs"));
