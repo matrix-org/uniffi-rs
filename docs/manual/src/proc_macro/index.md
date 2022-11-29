@@ -154,6 +154,33 @@ impl Foo {
 }
 ```
 
+## The `uniffi::Error` derive
+
+The `Error` derive registers a type as an error that be the `E` in a `Result<T, E>` return type of
+a `#[uniffi::export]`ed function or method. It can currently only be used on enums that the `Enum`
+derive also accepts. That is, exposing just the variants but no fields of an error enum as is
+possible in UDL is not (yet) supported with this derive. The generated foreign function will have
+the result's `T` as its return type, and throw the error in case the Rust call returns `Err(e)`.
+
+```rust
+#[derive(uniffi::Error)]
+pub enum MyError {
+    MissingInput,
+    IndexOutOfBounds {
+        index: u32,
+        size: u32,
+    }
+    Generic {
+        message: String,
+    }
+}
+
+#[uniffi::export]
+fn do_thing() -> Result<(), MyError> {
+    // ...
+}
+```
+
 ## Other limitations
 
 In addition to the per-item limitations of the macros presented above, there is also currently a
