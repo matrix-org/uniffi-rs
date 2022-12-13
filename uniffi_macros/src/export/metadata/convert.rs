@@ -29,9 +29,43 @@ pub(super) fn fn_param_metadata(params: &[syn::FnArg]) -> syn::Result<Vec<FnPara
                 }
             };
 
-            Some(convert_type(ty).map(|ty| FnParamMetadata { name, ty }))
+            Some(
+                convert_parameter_type(ty).map(|(ty, by_ref)| FnParamMetadata { name, ty, by_ref }),
+            )
         })
         .collect()
+}
+
+fn convert_parameter_type(ty: &syn::Type) -> syn::Result<(Type, bool)> {
+    if let syn::Type::Reference(r) = ty {
+        if let Some(l) = &r.lifetime {
+            return Err(syn::Error::new_spanned(
+                l,
+                "references with explicit lifetimes are not supported by uniffi::export",
+            ));
+        }
+
+        if let Some(m) = &r.mutability {
+            return Err(syn::Error::new_spanned(
+                m,
+                "mutable references are not supported by uniffi::export",
+            ));
+        }
+
+        match normalize_type(&r.elem) {
+            syn::Type::Path(type_path) if type_path.path.is_ident("str") => {
+                ensure_no_qself(type_path)?;
+                Ok((Type::String, true))
+            }
+            syn::Type::Slice(slice) => {
+                let inner_type = Box::new(convert_type(&slice.elem)?);
+                Ok((Type::Vec { inner_type }, true))
+            }
+            _ => Err(type_not_supported(ty)),
+        }
+    } else {
+        Ok((convert_type(ty)?, false))
+    }
 }
 
 pub(crate) fn convert_return_type(ty: &syn::Type) -> syn::Result<Option<Type>> {
@@ -43,13 +77,7 @@ pub(crate) fn convert_return_type(ty: &syn::Type) -> syn::Result<Option<Type>> {
 
 pub(crate) fn convert_type(ty: &syn::Type) -> syn::Result<Type> {
     let type_path = type_as_type_path(ty)?;
-
-    if type_path.qself.is_some() {
-        return Err(syn::Error::new_spanned(
-            type_path,
-            "qualified self types are not currently supported by uniffi::export",
-        ));
-    }
+    ensure_no_qself(type_path)?;
 
     if type_path.path.segments.len() > 1 {
         return Err(syn::Error::new_spanned(
@@ -67,6 +95,16 @@ pub(crate) fn convert_type(ty: &syn::Type) -> syn::Result<Type> {
         None => Err(syn::Error::new_spanned(
             type_path,
             "unreachable: TypePath must have non-empty segments",
+        )),
+    }
+}
+
+fn ensure_no_qself(type_path: &syn::TypePath) -> syn::Result<()> {
+    match &type_path.qself {
+        None => Ok(()),
+        Some(_) => Err(syn::Error::new_spanned(
+            type_path,
+            "qualified self types are not currently supported by uniffi::export",
         )),
     }
 }
@@ -152,10 +190,18 @@ fn type_as_type_name(arg: &syn::Type) -> syn::Result<&Ident> {
         .ok_or_else(|| type_not_supported(arg))
 }
 
-pub(super) fn type_as_type_path(ty: &syn::Type) -> syn::Result<&syn::TypePath> {
+/// Recursively extracts the inner type of `Type::Group` and `Type::Paren`,
+/// returns anything else as-is.
+pub(super) fn normalize_type(ty: &syn::Type) -> &syn::Type {
     match ty {
-        syn::Type::Group(g) => type_as_type_path(&g.elem),
-        syn::Type::Paren(p) => type_as_type_path(&p.elem),
+        syn::Type::Group(g) => normalize_type(&g.elem),
+        syn::Type::Paren(p) => normalize_type(&p.elem),
+        t => t,
+    }
+}
+
+pub(super) fn type_as_type_path(ty: &syn::Type) -> syn::Result<&syn::TypePath> {
+    match normalize_type(ty) {
         syn::Type::Path(p) => Ok(p),
         _ => Err(type_not_supported(ty)),
     }

@@ -46,6 +46,7 @@ pub struct FnParamMetadata {
     pub name: String,
     #[serde(rename = "type")]
     pub ty: Type,
+    pub by_ref: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]

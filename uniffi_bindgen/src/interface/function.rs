@@ -110,7 +110,7 @@ impl From<uniffi_meta::FnParamMetadata> for Argument {
         Argument {
             name: meta.name,
             type_: convert_type(&meta.ty),
-            by_ref: false,
+            by_ref: meta.by_ref,
             optional: false,
             default: None,
         }
