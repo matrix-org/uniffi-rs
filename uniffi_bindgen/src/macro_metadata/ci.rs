@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use crate::interface::{ComponentInterface, Enum, Error, Record, Type};
-use anyhow::anyhow;
 use uniffi_meta::Metadata;
 
 /// Add Metadata items to the ComponentInterface
@@ -19,42 +18,6 @@ pub fn add_to_ci(
     metadata_items: Vec<Metadata>,
 ) -> anyhow::Result<()> {
     for item in metadata_items {
-        let (item_desc, crate_name) = match &item {
-            Metadata::Func(meta) => (
-                format!("function `{}`", meta.name),
-                meta.module_path.first().unwrap(),
-            ),
-            Metadata::Method(meta) => (
-                format!("method `{}.{}`", meta.self_name, meta.name),
-                meta.module_path.first().unwrap(),
-            ),
-            Metadata::Record(meta) => (
-                format!("record `{}`", meta.name),
-                meta.module_path.first().unwrap(),
-            ),
-            Metadata::Enum(meta) => (
-                format!("enum `{}`", meta.name),
-                meta.module_path.first().unwrap(),
-            ),
-            Metadata::Object(meta) => (
-                format!("object `{}`", meta.name),
-                meta.module_path.first().unwrap(),
-            ),
-            Metadata::Error(meta) => (
-                format!("error `{}`", meta.name),
-                meta.module_path.first().unwrap(),
-            ),
-        };
-
-        let ns = iface.namespace();
-        if crate_name != ns {
-            return Err(anyhow!("Found {item_desc} from crate `{crate_name}`.")
-                .context(format!(
-                    "Main crate is expected to be named `{ns}` based on the UDL namespace."
-                ))
-                .context("Mixing symbols from multiple crates is not supported yet."));
-        }
-
         match item {
             Metadata::Func(meta) => {
                 iface.add_fn_meta(meta)?;
