@@ -5,7 +5,7 @@ use uniffi_meta::{EnumMetadata, FieldMetadata, VariantMetadata};
 
 use crate::{
     export::metadata::convert::convert_type,
-    util::{assert_type_eq, create_metadata_static_var, try_read_field},
+    util::{create_metadata_static_var, try_read_field},
 };
 
 pub fn expand_enum(input: DeriveInput, module_path: Vec<String>) -> TokenStream {
@@ -28,12 +28,9 @@ pub fn expand_enum(input: DeriveInput, module_path: Vec<String>) -> TokenStream 
             .into_compile_error()
     };
 
-    let type_assertion = assert_type_eq(ident, quote! { crate::uniffi_types::#ident });
-
     quote! {
         #ffi_converter_impl
         #meta_static_var
-        #type_assertion
     }
 }
 

@@ -5,7 +5,7 @@ use uniffi_meta::{FieldMetadata, RecordMetadata};
 
 use crate::{
     export::metadata::convert::convert_type,
-    util::{assert_type_eq, create_metadata_static_var, try_read_field},
+    util::{create_metadata_static_var, try_read_field},
 };
 
 pub fn expand_record(input: DeriveInput, module_path: Vec<String>) -> TokenStream {
@@ -40,8 +40,6 @@ pub fn expand_record(input: DeriveInput, module_path: Vec<String>) -> TokenStrea
         .into_compile_error()
     };
 
-    let type_assertion = assert_type_eq(ident, quote! { crate::uniffi_types::#ident });
-
     quote! {
         #[automatically_derived]
         impl ::uniffi::RustBufferFfiConverter for #ident {
@@ -57,7 +55,6 @@ pub fn expand_record(input: DeriveInput, module_path: Vec<String>) -> TokenStrea
         }
 
         #meta_static_var
-        #type_assertion
     }
 }
 

@@ -119,11 +119,6 @@ pub fn expand_export(metadata: ExportItem, mod_path: &[String]) -> TokenStream {
                 .collect();
 
             quote_spanned! {self_ident.span()=>
-                ::uniffi::deps::static_assertions::assert_type_eq_all!(
-                    #self_ident,
-                    crate::uniffi_types::#self_ident
-                );
-
                 #method_tokens
             }
         }
@@ -164,11 +159,11 @@ fn fn_type_assertions(sig: &Signature) -> TokenStream {
             }
             Type::ArcObject { object_name } => {
                 let object_ident = format_ident!("{object_name}");
-                quote! { ::std::sync::Arc<crate::uniffi_types::#object_ident> }
+                quote! { ::std::sync::Arc<#object_ident> }
             }
             Type::Unresolved { name } => {
                 let ident = format_ident!("{name}");
-                quote! { crate::uniffi_types::#ident }
+                quote! { #ident }
             }
         }
     }
@@ -195,16 +190,7 @@ fn fn_type_assertions(sig: &Signature) -> TokenStream {
         .collect();
     let input_output_type_assertions: TokenStream = type_assertions.into_values().collect();
 
-    let throws_type_assertion = sig.output.as_ref().and_then(|s| {
-        let ident = s.throws.as_ref()?;
-        Some(assert_type_eq(
-            ident,
-            quote! { crate::uniffi_types::#ident },
-        ))
-    });
-
     quote! {
         #input_output_type_assertions
-        #throws_type_assertion
     }
 }

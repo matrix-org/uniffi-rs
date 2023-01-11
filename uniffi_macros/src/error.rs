@@ -10,8 +10,7 @@ use uniffi_meta::{ErrorMetadata, VariantMetadata};
 use crate::{
     enum_::{enum_ffi_converter_impl, variant_metadata},
     util::{
-        assert_type_eq, chain, create_metadata_static_var, either_attribute_arg, AttributeSliceExt,
-        UniffiAttribute,
+        chain, create_metadata_static_var, either_attribute_arg, AttributeSliceExt, UniffiAttribute,
     },
 };
 
@@ -39,7 +38,6 @@ pub fn expand_error(input: DeriveInput, module_path: Vec<String>) -> TokenStream
         _ => None,
     };
 
-    let type_assertion = assert_type_eq(ident, quote! { crate::uniffi_types::#ident });
     let variant_errors: TokenStream = match variants {
         Ok(vs) => vs
             .iter()
@@ -65,7 +63,6 @@ pub fn expand_error(input: DeriveInput, module_path: Vec<String>) -> TokenStream
         impl ::uniffi::FfiError for #ident {}
 
         #meta_static_var
-        #type_assertion
         #variant_errors
         #attr_error
     }

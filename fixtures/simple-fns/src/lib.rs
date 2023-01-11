@@ -2,9 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
-use uniffi_types::MyHashSet;
+type MyHashSet = Mutex<HashSet<String>>;
 
 #[uniffi::export]
 fn get_string() -> String {
@@ -45,11 +48,5 @@ fn set_contains(set: Arc<MyHashSet>, value: String) -> bool {
 // other generic builtin types) wasn't being added as a known type.
 #[uniffi::export]
 fn dummy(_arg: Option<i8>) {}
-
-mod uniffi_types {
-    use std::{collections::HashSet, sync::Mutex};
-
-    pub type MyHashSet = Mutex<HashSet<String>>;
-}
 
 include!(concat!(env!("OUT_DIR"), "/simple-fns.uniffi.rs"));
